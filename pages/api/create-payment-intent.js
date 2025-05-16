@@ -1,4 +1,7 @@
 import Stripe from "stripe";
+import fs from "fs";
+import path from "path";
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export default async function handler(req, res) {
@@ -25,9 +28,28 @@ export default async function handler(req, res) {
     const feeCents = Math.ceil(tipCents * 0.03);   // 3% → 30
     const totalCents = coverFee ? tipCents + feeCents : tipCents;
 
+    // 🔽 Пытаемся получить имя по userId
+    let waiterName = waiter;
+    try {
+      const userDataPath = path.join(process.cwd(), "data", "users.json");
+      const userData = JSON.parse(fs.readFileSync(userDataPath, "utf-8")) || {};
+ console.log("Loaded userData keys:", Object.keys(userData));
+console.log("Looking up waiter:", waiter);
+console.log("Matched entry:", userData[waiter]);
+
+const profile = userData[waiter] || {};
+const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
+console.log("Resolved fullName:", fullName);
+
+if (fullName) waiterName = fullName;
+    } catch (e) {
+      console.warn("Could not resolve waiter name:", e.message);
+    }
+
     console.log(
-      `[Stripe] ${waiter} receives €${(coverFee ? amountEuro : (amountEuro - feeCents / 100)).toFixed(2)} | charged €${(totalCents / 100).toFixed(2)}`
+      `[Stripe] ${waiterName} receives €${(coverFee ? amountEuro : (amountEuro - feeCents / 100)).toFixed(2)} | charged €${(totalCents / 100).toFixed(2)}`
     );
+    console.log("Resolved waiter name:", waiterName);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -37,9 +59,9 @@ export default async function handler(req, res) {
           price_data: {
             currency: "eur",
             product_data: {
-              name: `Tip for ${waiter}`,
+              name: `Tip for ${waiterName}`,
             },
-            unit_amount: totalCents, // ⬅️ уже готовая сумма в центах!
+            unit_amount: totalCents,
           },
           quantity: 1,
         },
