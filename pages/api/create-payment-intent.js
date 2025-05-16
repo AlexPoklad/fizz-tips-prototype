@@ -1,29 +1,37 @@
 import Stripe from "stripe";
-import fs from "fs";
-import path from "path";
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const dataFile = path.resolve("waiters.json");
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-  const { amount, waiter } = req.body;
+  const { amount, waiter, coverFee } = req.body;
 
-  // Загружаем accountId из waiters.json
-  const waiters = fs.existsSync(dataFile)
-    ? JSON.parse(fs.readFileSync(dataFile, "utf-8"))
-    : {};
-
-  const connectedAccountId = waiters[waiter];
-
-  if (!connectedAccountId) {
-    return res.status(400).json({ error: "Waiter not found or not connected" });
+  if (!amount || !waiter) {
+    return res.status(400).json({ error: "Missing amount or waiter" });
   }
 
   try {
+    const amountEuro = typeof amount === "string"
+      ? parseFloat(amount.replace(",", "."))
+      : Number(amount);
+
+    if (isNaN(amountEuro)) {
+      return res.status(400).json({ error: "Invalid amount format" });
+    }
+
+    const tipCents = Math.round(amountEuro * 100); // 10.00 → 1000
+    const feeCents = Math.ceil(tipCents * 0.03);   // 3% → 30
+    const totalCents = coverFee ? tipCents + feeCents : tipCents;
+
+    console.log(
+      `[Stripe] ${waiter} receives €${(coverFee ? amountEuro : (amountEuro - feeCents / 100)).toFixed(2)} | charged €${(totalCents / 100).toFixed(2)}`
+    );
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
+      mode: "payment",
       line_items: [
         {
           price_data: {
@@ -31,24 +39,19 @@ export default async function handler(req, res) {
             product_data: {
               name: `Tip for ${waiter}`,
             },
-            unit_amount: Math.round(amount * 100),
+            unit_amount: totalCents, // ⬅️ уже готовая сумма в центах!
           },
           quantity: 1,
         },
       ],
-      mode: "payment",
-      payment_intent_data: {
-        transfer_data: {
-          destination: connectedAccountId
-        }
-      },
-      success_url: `${req.headers.origin}/thank-you?via=stripe`,
+      success_url: `${req.headers.origin}/thank-you`,
       cancel_url: `${req.headers.origin}/${waiter}`,
+      metadata: { waiter },
     });
 
     res.status(200).json({ checkout_url: session.url });
   } catch (err) {
-    console.error("Stripe error:", err);
-    res.status(500).json({ error: err.message });
+    console.error("Stripe error:", err.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 }
