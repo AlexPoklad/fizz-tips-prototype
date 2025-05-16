@@ -5,18 +5,23 @@ export default function TipPage() {
   const router = useRouter();
   const { username } = router.query;
 
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(10.0);
   const [coverFee, setCoverFee] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const feeRate = 0.03;
-  const parsed = parseFloat(amount || "0");
-  const fee = parsed * feeRate;
-  const total = coverFee ? parsed + fee : parsed;
-  const received = coverFee ? parsed : parsed - fee;
+  const tip = parseFloat(amount || 0);
+  const fee = parseFloat((tip * feeRate).toFixed(2));
+  const total = coverFee ? tip + fee : tip;
+  const received = coverFee ? tip : tip - fee;
+
+  const handleChange = (e) => {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value)) setAmount(value);
+  };
 
   const handlePayment = async () => {
-    if (!amount || parsed <= 0) return alert("Enter valid amount");
+    if (!amount || tip <= 0) return alert("Enter valid amount");
     setLoading(true);
     const res = await fetch("/api/create-payment-intent", {
       method: "POST",
@@ -36,6 +41,7 @@ export default function TipPage() {
       <img
         src={`/images/${username}.jpg`}
         alt={username}
+        onError={(e) => (e.target.style.display = "none")}
         style={{
           width: 120,
           height: 120,
@@ -45,29 +51,57 @@ export default function TipPage() {
           border: "3px solid #eee"
         }}
       />
+
       <h2 style={{ marginBottom: 8 }}>Leave a tip for <strong>{username}</strong></h2>
 
       <div style={{ fontSize: "1rem", marginBottom: 8 }}>Amount:</div>
-      <input
-        type="number"
-        inputMode="decimal"
-        pattern="[0-9]*"
-        placeholder="0.00"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        style={{
-          fontSize: "2rem",
-          textAlign: "center",
-          border: "none",
-          borderBottom: "2px solid #ccc",
-          padding: "0.5rem",
-          width: "100%",
-          maxWidth: 200,
-          marginBottom: "1.5rem"
-        }}
-      />
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "1.5rem", gap: "1rem" }}>
+        <button
+          onClick={() => setAmount(Math.max(0, amount - 1))}
+          style={{
+            fontSize: "1.2rem",
+            width: 40,
+            height: 40,
+            borderRadius: 6,
+            border: "1px solid #ccc",
+            background: "#fff",
+            cursor: "pointer"
+          }}
+        >
+          –
+        </button>
+        <input
+          type="number"
+          step="0.5"
+          inputMode="decimal"
+          value={amount}
+          onChange={handleChange}
+          style={{
+            fontSize: "2rem",
+            textAlign: "center",
+            border: "none",
+            borderBottom: "2px solid #ccc",
+            width: 120,
+            background: "transparent"
+          }}
+        />
+        <button
+          onClick={() => setAmount(amount + 1)}
+          style={{
+            fontSize: "1.2rem",
+            width: 40,
+            height: 40,
+            borderRadius: 6,
+            border: "1px solid #ccc",
+            background: "#fff",
+            cursor: "pointer"
+          }}
+        >
+          +
+        </button>
+      </div>
 
-      <div style={{ marginBottom: 12 }}>Who pays the 3% fee?</div>
+      <div style={{ marginBottom: 12 }}>Do you want the waiter to receive the full tip amount?</div>
       <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 20 }}>
         <button
           onClick={() => setCoverFee(true)}
@@ -81,7 +115,7 @@ export default function TipPage() {
             minWidth: 100
           }}
         >
-          Guest
+          Yes
         </button>
         <button
           onClick={() => setCoverFee(false)}
@@ -95,11 +129,11 @@ export default function TipPage() {
             minWidth: 100
           }}
         >
-          Waiter
+          No
         </button>
       </div>
 
-      {parsed > 0 && (
+      {tip > 0 && (
         <div style={{ fontSize: "0.9rem", marginBottom: 24, color: "#666" }}>
           You pay: <strong>€{total.toFixed(2)}</strong><br />
           {username} receives: <strong>€{received.toFixed(2)}</strong>
@@ -108,7 +142,7 @@ export default function TipPage() {
 
       <button
         onClick={handlePayment}
-        disabled={loading || parsed <= 0}
+        disabled={loading || tip <= 0}
         style={{
           background: "#000",
           color: "#fff",
