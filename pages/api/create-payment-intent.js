@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import fs from "fs";
 import path from "path";
+import { computeFinalAmounts } from "../../lib/feeModel";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -24,32 +25,24 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid amount format" });
     }
 
-    const tipCents = Math.round(amountEuro * 100); // 10.00 → 1000
-    const feeCents = Math.ceil(tipCents * 0.03);   // 3% → 30
-    const totalCents = coverFee ? tipCents + feeCents : tipCents;
+    // 🔽 Вычисляем финальные значения
+    const { total, received, fee } = computeFinalAmounts(amountEuro, coverFee);
+    const totalCents = Math.round(total * 100);
+    const tipCents = Math.round(received * 100);
 
-    // 🔽 Пытаемся получить имя по userId
+    // 🔽 Имя официанта
     let waiterName = waiter;
     try {
       const userDataPath = path.join(process.cwd(), "data", "users.json");
       const userData = JSON.parse(fs.readFileSync(userDataPath, "utf-8")) || {};
- console.log("Loaded userData keys:", Object.keys(userData));
-console.log("Looking up waiter:", waiter);
-console.log("Matched entry:", userData[waiter]);
-
-const profile = userData[waiter] || {};
-const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
-console.log("Resolved fullName:", fullName);
-
-if (fullName) waiterName = fullName;
+      const profile = userData[waiter] || {};
+      const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
+      if (fullName) waiterName = fullName;
     } catch (e) {
       console.warn("Could not resolve waiter name:", e.message);
     }
 
-    console.log(
-      `[Stripe] ${waiterName} receives €${(coverFee ? amountEuro : (amountEuro - feeCents / 100)).toFixed(2)} | charged €${(totalCents / 100).toFixed(2)}`
-    );
-    console.log("Resolved waiter name:", waiterName);
+    console.log(`[Stripe] ${waiterName} receives €${(tipCents / 100).toFixed(2)} | charged €${(totalCents / 100).toFixed(2)}`);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
