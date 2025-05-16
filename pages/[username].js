@@ -31,12 +31,37 @@ export default function TipPage() {
     }
   }, [amount, fee]);
 
-  const handlePay = (method) => {
+  const handleStripe = async () => {
+    setProcessing(true);
+    try {
+      const res = await fetch("/api/create-payment-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: parseFloat(guestPays),
+          waiter: username
+        })
+      });
+      const data = await res.json();
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      } else {
+        alert("Failed to start Stripe checkout");
+        setProcessing(false);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Stripe error");
+      setProcessing(false);
+    }
+  };
+
+  const handleBank = () => {
     setProcessing(true);
     setTimeout(() => {
-      const url = `/api/pay/${method}?waiter=${username}&amount=${amount}&fee=${fee}`;
+      const url = `/api/pay/bank?waiter=${username}&amount=${amount}&fee=${fee}`;
       window.location.href = url;
-    }, 2000);
+    }, 1000);
   };
 
   return (
@@ -98,7 +123,7 @@ export default function TipPage() {
         <>
           <h3 style={{ marginTop: "1.5rem" }}>Select payment method:</h3>
           <button
-            onClick={() => handlePay("stripe")}
+            onClick={handleStripe}
             style={{
               margin: "0.5rem 0",
               padding: "0.75rem 1.5rem",
@@ -118,7 +143,7 @@ export default function TipPage() {
             Pay with Card / Apple Pay
           </button>
           <button
-            onClick={() => handlePay("bank")}
+            onClick={handleBank}
             style={{
               margin: "0.5rem 0",
               padding: "0.75rem 1.5rem",
